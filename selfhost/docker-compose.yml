@@ -464,6 +464,15 @@ services:
       SUPABASE_DB_URL: postgresql://postgres:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
       # TODO: Allow configuring VERIFY_JWT per function.
       VERIFY_JWT: "${FUNCTIONS_VERIFY_JWT}"
+      # Email (registration / approval / invites) — sent via Resend's HTTP API by the custom
+      # functions. Leave RESEND_API_KEY empty to disable those emails (functions skip them
+      # gracefully). Turnstile secret is for the registration captcha check.
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      MEMBER_FROM_EMAIL: ${MEMBER_FROM_EMAIL:-}
+      INVITE_FROM_EMAIL: ${INVITE_FROM_EMAIL:-}
+      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-}
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL:-}
+      TURNSTILE_SECRET: ${TURNSTILE_SECRET:-}
     command:
       [
         "start",
