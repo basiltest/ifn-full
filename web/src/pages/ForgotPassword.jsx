@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Turnstile } from '@marsidev/react-turnstile'
 import { supabase } from '../lib/supabase'
 import { authErrorMessage } from '../lib/authErrors'
+import { CAPTCHA_SITEKEY, captchaEnabled } from '../lib/captcha'
 import Logo from '../components/Logo'
 
 export default function ForgotPassword() {
@@ -9,6 +11,16 @@ export default function ForgotPassword() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [sent, setSent] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState('')
+  const turnstileRef = useRef(null)
+
+  // Turnstile tokens are single-use — GoTrue spends it on every /recover call. Mint a fresh
+  // one before any retry or the next request 400s even with a valid email.
+  function resetCaptcha() {
+    if (!captchaEnabled) return
+    turnstileRef.current?.reset()
+    setCaptchaToken('')
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -17,19 +29,26 @@ export default function ForgotPassword() {
       setError('Please enter a valid email address.')
       return
     }
+    if (captchaEnabled && !captchaToken) {
+      setError('Please complete the verification below.')
+      return
+    }
     setError('')
     setLoading(true)
     try {
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(trimmed, {
         redirectTo: `${window.location.origin}/reset-password`,
+        ...(captchaEnabled ? { captchaToken } : {}),
       })
       if (resetError) {
+        resetCaptcha()
         setError(authErrorMessage(resetError))
         return
       }
       // Generic success regardless of whether the account exists (no enumeration).
       setSent(true)
     } catch {
+      resetCaptcha()
       setError('Something went wrong. Please try again.')
     } finally {
       setLoading(false)
@@ -80,6 +99,19 @@ export default function ForgotPassword() {
             onChange={(e) => setEmail(e.target.value)}
           />
         </div>
+
+        {captchaEnabled && (
+          <div className="mb-4 flex justify-center">
+            <Turnstile
+              ref={turnstileRef}
+              siteKey={CAPTCHA_SITEKEY}
+              onSuccess={setCaptchaToken}
+              onExpire={() => setCaptchaToken('')}
+              onError={() => setCaptchaToken('')}
+              options={{ theme: 'auto', size: 'flexible' }}
+            />
+          </div>
+        )}
 
         <button type="submit" disabled={loading} aria-busy={loading} className="btn-primary w-full">
           {loading ? 'Sending...' : 'Send reset link'}
