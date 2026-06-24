@@ -1,0 +1,49 @@
+@startuml
+' IFN target architecture on the existing Windows Server (Docker Desktop on WSL2).
+' Windows variant of the Linux/VPS mockup: Caddy -> IIS (TLS + static SPA + reverse proxy via ARR),
+' VPS -> Windows Server running Docker Desktop on WSL2. Compose stack unchanged.
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam monochrome true
+skinparam defaultFontName Helvetica
+skinparam rectangle {
+  BackgroundColor #F5F5F5
+  BorderColor #555555
+}
+
+actor "Member\n(browser)" as user
+
+node "IIS 10.0\nTLS + static SPA + reverse proxy (ARR)" as iis
+
+node "Windows Server (existing)\nDocker Desktop on WSL2" as host {
+  rectangle "Docker Compose: supabase" as compose {
+    component "Studio\n(localhost only)" as studio
+    component "postgres-meta" as meta
+    component "Kong gateway :8000\n(127.0.0.1)" as kong
+    component "Storage API" as storage
+    component "PostgREST (rest)" as rest
+    component "GoTrue (auth)" as auth
+    database "Postgres 15+\n(RLS, pg_cron)" as pg
+  }
+}
+
+cloud "SMTP relay\n(Brevo / Resend / SES)" as smtp
+cloud "Offsite backup\n(B2 / S3)" as backup
+
+user --> iis : HTTPS app.example.org\n(SPA assets)
+user --> iis : HTTPS api.example.org\n(/auth /rest /storage)
+iis --> kong : reverse proxy (ARR)\n-> 127.0.0.1:8000
+
+studio --> meta
+kong --> storage
+kong --> rest
+kong --> auth
+
+storage --> pg
+rest --> pg
+auth --> pg
+meta --> pg
+
+auth --> smtp : confirmation / recovery mail
+pg ..> backup : nightly pg_dump + files
+@enduml

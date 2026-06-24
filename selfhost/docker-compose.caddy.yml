@@ -1,0 +1,64 @@
+services:
+
+  # By default, Kong is used as the API gateway and its ports/env are reset
+  # below so Caddy can terminate TLS in front of it.
+  #
+  # When running Envoy instead, e.g.:
+  #   docker compose -f docker-compose.yml -f docker-compose.envoy.yml \
+  #                  -f docker-compose.caddy.yml up -d
+  # comment out the `kong:` block below and uncomment the `api-gw:` block
+  # (and the matching `depends_on` entry further down) so Caddy sits in front
+  # of Envoy rather than Kong.
+
+  #api-gw:
+  #  ports: !reset []
+
+  kong:
+    ports: !reset []
+    environment:
+      KONG_PORT_MAPS: "443:8000,443:8443"
+
+  # Studio is NOT public. Publish on loopback only so it can be reached from the
+  # host (e.g. fronted by `tailscale serve` for admin over the tailnet), never
+  # from the LAN or the internet.
+  studio:
+    ports:
+      - "127.0.0.1:8003:3000"
+
+  # Postgres / connection pooler: loopback only. Direct DB access goes over
+  # Tailscale (SSH tunnel or `tailscale serve`), never the public internet.
+  supavisor:
+    ports: !override
+      - "127.0.0.1:5443:5432"
+      - "127.0.0.1:${POOLER_PROXY_PORT_TRANSACTION}:6543"
+
+  caddy:
+    container_name: supabase-caddy
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    depends_on:
+      #api-gw:
+      #  condition: service_healthy
+      kong:
+        condition: service_healthy
+      studio:
+        condition: service_healthy
+    environment:
+      PROXY_DOMAIN: ${PROXY_DOMAIN}
+    # Caddy serves the built app at / and proxies the Supabase API paths to Kong.
+    # No basic_auth: the dashboard is no longer public (see studio loopback bind above).
+    command: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+    volumes:
+      - ./volumes/proxy/caddy:/etc/caddy
+      - ../web/dist:/srv/app:ro
+      - /etc/caddy-certs:/etc/caddy-certs:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
