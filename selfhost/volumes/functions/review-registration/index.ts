@@ -10,11 +10,11 @@
 // storage delete run with the service role.
 //
 // Deploy:  supabase functions deploy review-registration
-// Secrets: RESEND_API_KEY, PUBLIC_SITE_URL, MEMBER_FROM_EMAIL (or INVITE_FROM_EMAIL),
-//          SUPPORT_EMAIL (the "reach out to ..." address; optional, falls back to a phrase).
+// Secrets: GMAIL_SMTP_USER + GMAIL_SMTP_PASS (Gmail SMTP via _shared/smtp.ts), PUBLIC_SITE_URL,
+//          MEMBER_FROM_EMAIL (or INVITE_FROM_EMAIL), SUPPORT_EMAIL (optional, falls back to a phrase).
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { sendEmail } from '../_shared/resend.ts'
+import { sendEmail } from '../_shared/smtp.ts'
 import { generatePassword } from '../_shared/password.ts'
 
 const CORS = {
@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
   const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
   const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
+  const MAIL_ENABLED = !!Deno.env.get('GMAIL_SMTP_USER')
   const SITE_URL = (Deno.env.get('PUBLIC_SITE_URL') || '').replace(/\/$/, '')
   const FROM = Deno.env.get('MEMBER_FROM_EMAIL') || Deno.env.get('INVITE_FROM_EMAIL')
   const SUPPORT = Deno.env.get('SUPPORT_EMAIL') || 'the IFN team'
@@ -110,9 +110,9 @@ Deno.serve(async (req) => {
     // Delete the certificate (we don't retain rejected applicants' documents).
     if (reqRow.cert_path) await admin.storage.from('registration-certs').remove([reqRow.cert_path])
     // Disapprove email (best-effort).
-    if (RESEND_API_KEY && FROM) {
+    if (MAIL_ENABLED && FROM) {
       const { subject, text } = rejectEmail(reqRow.name, SUPPORT)
-      try { await sendEmail({ apiKey: RESEND_API_KEY, from: FROM, to: reqRow.email, subject, text }) }
+      try { await sendEmail({ from: FROM, to: reqRow.email, subject, text }) }
       catch (e2) { console.error('reject email failed:', e2) }
     }
     return json({ ok: true })
@@ -143,9 +143,9 @@ Deno.serve(async (req) => {
   const loginUrl = `${SITE_URL}/login`
   const guideUrl = `${SITE_URL}/guides/${finalRole === 'mentor' ? 'IFN-User-Guide-Plus.pdf' : 'IFN-User-Guide.pdf'}`
   let emailed = false
-  if (RESEND_API_KEY && FROM) {
+  if (MAIL_ENABLED && FROM) {
     const { subject, text } = approveEmail(reqRow.name, reqRow.email, password, loginUrl, guideUrl)
-    try { await sendEmail({ apiKey: RESEND_API_KEY, from: FROM, to: reqRow.email, subject, text }); emailed = true }
+    try { await sendEmail({ from: FROM, to: reqRow.email, subject, text }); emailed = true }
     catch (e) { console.error('approve email failed:', e) }
   }
 

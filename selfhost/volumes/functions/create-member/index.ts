@@ -6,14 +6,15 @@
 // Authorization is enforced two ways: the caller's JWT is checked against profiles.role
 // === 'admin' before anything happens (a non-admin gets 403), and only then does a
 // service-role client create the auth user. The generated password is returned to the
-// admin once (shown in the UI) and emailed to the member via Resend (plain text).
+// admin once (shown in the UI) and emailed to the member via Gmail SMTP (plain text).
 //
 // Deploy:  supabase functions deploy create-member
-// Secrets: RESEND_API_KEY, PUBLIC_SITE_URL, MEMBER_FROM_EMAIL (falls back to INVITE_FROM_EMAIL).
+// Secrets: GMAIL_SMTP_USER + GMAIL_SMTP_PASS (Gmail SMTP via _shared/smtp.ts),
+//          PUBLIC_SITE_URL, MEMBER_FROM_EMAIL (falls back to INVITE_FROM_EMAIL).
 // (SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are injected by the platform.)
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { sendEmail } from '../_shared/resend.ts'
+import { sendEmail } from '../_shared/smtp.ts'
 import { generatePassword } from '../_shared/password.ts'
 
 const CORS = {
@@ -65,12 +66,12 @@ Deno.serve(async (req) => {
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
   const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
   const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
+  const MAIL_ENABLED = !!Deno.env.get('GMAIL_SMTP_USER')
   const SITE_URL = Deno.env.get('PUBLIC_SITE_URL')
   const FROM = Deno.env.get('MEMBER_FROM_EMAIL') || Deno.env.get('INVITE_FROM_EMAIL')
 
-  if (!RESEND_API_KEY || !SITE_URL || !FROM) {
-    return json({ error: 'Email is not configured (RESEND_API_KEY / PUBLIC_SITE_URL / MEMBER_FROM_EMAIL).' }, 500)
+  if (!MAIL_ENABLED || !SITE_URL || !FROM) {
+    return json({ error: 'Email is not configured (GMAIL_SMTP_USER / PUBLIC_SITE_URL / MEMBER_FROM_EMAIL).' }, 500)
   }
 
   let email: unknown, role: unknown, memberTypeRaw: unknown
@@ -138,10 +139,10 @@ Deno.serve(async (req) => {
   const { subject, text } = credentialsEmail(SITE_URL, role, addr, password)
   let emailed = false
   try {
-    await sendEmail({ apiKey: RESEND_API_KEY, from: FROM, to: addr, subject, text })
+    await sendEmail({ from: FROM, to: addr, subject, text })
     emailed = true
   } catch (e) {
-    console.error('Resend send failed:', e)
+    console.error('SMTP send failed:', e)
   }
 
   return json({ ok: true, email: addr, role, password, emailed })

@@ -464,9 +464,17 @@ services:
       SUPABASE_DB_URL: postgresql://postgres:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
       # TODO: Allow configuring VERIFY_JWT per function.
       VERIFY_JWT: "${FUNCTIONS_VERIFY_JWT}"
-      # Email (registration / approval / invites) — sent via Resend's HTTP API by the custom
-      # functions. Leave RESEND_API_KEY empty to disable those emails (functions skip them
-      # gracefully). Turnstile secret is for the registration captcha check.
+      # Email (registration / approval / admin-created member). register-request,
+      # review-registration and create-member send via Gmail SMTP (_shared/smtp.ts):
+      # set GMAIL_SMTP_USER + GMAIL_SMTP_PASS (a Google App Password) to enable them;
+      # leave GMAIL_SMTP_USER empty and those emails are skipped gracefully (accounts
+      # still get created, password returned to the admin UI). RESEND_API_KEY is still
+      # read by send-contact. Turnstile secret is for the registration captcha check.
+      GMAIL_SMTP_USER: ${GMAIL_SMTP_USER:-}
+      GMAIL_SMTP_PASS: ${GMAIL_SMTP_PASS:-}
+      GMAIL_SMTP_HOST: ${GMAIL_SMTP_HOST:-smtp.gmail.com}
+      GMAIL_SMTP_PORT: ${GMAIL_SMTP_PORT:-465}
+      GMAIL_FROM_NAME: ${GMAIL_FROM_NAME:-ICFAI Founders Network}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       MEMBER_FROM_EMAIL: ${MEMBER_FROM_EMAIL:-}
       INVITE_FROM_EMAIL: ${INVITE_FROM_EMAIL:-}

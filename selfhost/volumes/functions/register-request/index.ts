@@ -6,13 +6,14 @@
 //
 // Deploy WITHOUT JWT verification (it's public):
 //   supabase functions deploy register-request --no-verify-jwt
-// Secrets: RESEND_API_KEY, MEMBER_FROM_EMAIL (or INVITE_FROM_EMAIL). Optional: TURNSTILE_SECRET
+// Secrets: GMAIL_SMTP_USER + GMAIL_SMTP_PASS (Gmail SMTP via _shared/smtp.ts), MEMBER_FROM_EMAIL
+// (or INVITE_FROM_EMAIL) for the gate. Optional: TURNSTILE_SECRET
 // (Cloudflare Turnstile) — when set, every request must carry a valid captchaToken or it's
 // rejected (fail-closed). When unset, the captcha check is skipped entirely. SUPABASE_URL and
 // SUPABASE_SERVICE_ROLE_KEY are injected by the platform.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { sendEmail } from '../_shared/resend.ts'
+import { sendEmail } from '../_shared/smtp.ts'
 
 // Verify a Cloudflare Turnstile token against the siteverify API. Returns false on any failure
 // — including a network error reaching Cloudflare — so register stays fail-closed (the honeypot
@@ -56,7 +57,7 @@ Deno.serve(async (req) => {
 
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
   const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
+  const MAIL_ENABLED = !!Deno.env.get('GMAIL_SMTP_USER')
   const FROM = Deno.env.get('MEMBER_FROM_EMAIL') || Deno.env.get('INVITE_FROM_EMAIL')
 
   let body: Record<string, unknown>
@@ -149,7 +150,7 @@ Deno.serve(async (req) => {
   try { await admin.rpc('notify_admins_new_registration', { p_name: name, p_member_type: memberType }) } catch (e) { console.error('notify failed:', e) }
 
   // Acknowledgement email (plain text, best-effort).
-  if (RESEND_API_KEY && FROM) {
+  if (MAIL_ENABLED && FROM) {
     const text = `Hi ${name},
 
 Thanks for requesting access to the ICFAI Founders Network. We've received your request and our team will review it shortly.
@@ -157,7 +158,7 @@ Thanks for requesting access to the ICFAI Founders Network. We've received your 
 You'll get another email once it has been reviewed.
 
 — ICFAI Founders Network`
-    try { await sendEmail({ apiKey: RESEND_API_KEY, from: FROM, to: email, subject: 'We received your registration request', text }) }
+    try { await sendEmail({ from: FROM, to: email, subject: 'We received your registration request', text }) }
     catch (e) { console.error('ack email failed:', e) }
   }
 
